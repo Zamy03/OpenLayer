@@ -4,9 +4,59 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Quick Start</title>
+    <link rel="stylesheet" href="https://cdn.skypack.dev/ol/ol.css" />
+    <style>
+        body {
+            margin: 0;
+            height: 100%;
+        }
+
+        #map {
+            position: relative;
+            top: 0;
+            bottom: 0;
+            background-color: #eef;
+            border: 2px solid #333;
+            width: 100%;
+            height: 1100px;
+        }
+
+#svg-overlay {
+  position: absolute;
+  top: 0;
+  left: 0;
+}
+
+.tour-line {
+  stroke: #ff5733;
+  stroke-width: 2;
+  stroke-dasharray: 5, 5;
+  animation: dash 2s linear infinite;
+}
+
+@keyframes dash {
+  to {
+    stroke-dashoffset: -20;
+  }
+}
+
+
+    </style>
   </head>
+
   <body>
-    <div id="map"></div>
+
+    <div id="map" class="map"></div>
+    <button id="rotate-left" title="Rotate clockwise">↻</button>
+    <button id="rotate-right" title="Rotate counterclockwise">↺</button>
+    <button id="pan-to-jakarta">Pan to Jakarta</button>
+    <button id="elastic-to-kyoto">Elastic to Kyoto</button>
+    <button id="bounce-to-istanbul">Bounce to Istanbul</button>
+    <button id="spin-to-paris">Spin to Paris</button>
+    <button id="fly-to-tokyo">Fly to Tokyo</button>
+    <button id="rotate-around-paris">Rotate around Paris</button>
+    <button id="tour">Take a tour</button>
     <script type="module" src="./main.js"></script>
+
   </body>
 </html>
