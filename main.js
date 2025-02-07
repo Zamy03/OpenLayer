@@ -1,199 +1,244 @@
-import Map from 'https://cdn.skypack.dev/ol/Map.js';
-import OSM from 'https://cdn.skypack.dev/ol/source/OSM.js';
-import TileLayer from 'https://cdn.skypack.dev/ol/layer/Tile.js';
-import View from 'https://cdn.skypack.dev/ol/View.js';
-import {easeIn, easeOut} from 'https://cdn.skypack.dev/ol/easing.js';
-import {fromLonLat} from 'https://cdn.skypack.dev/ol/proj.js';
+import Map from "https://cdn.skypack.dev/ol/Map.js";
+import View from "https://cdn.skypack.dev/ol/View.js";
+import TileLayer from "https://cdn.skypack.dev/ol/layer/Tile.js";
+import OSM from "https://cdn.skypack.dev/ol/source/OSM.js";
+import Overlay from "https://cdn.skypack.dev/ol/Overlay.js";
+import { toLonLat, fromLonLat } from "https://cdn.skypack.dev/ol/proj.js";
+import Feature from "https://cdn.skypack.dev/ol/Feature.js";
+import Point from "https://cdn.skypack.dev/ol/geom/Point.js";
+import VectorSource from "https://cdn.skypack.dev/ol/source/Vector.js";
+import VectorLayer from "https://cdn.skypack.dev/ol/layer/Vector.js";
+import { Style, Icon } from "https://cdn.skypack.dev/ol/style.js";
+import Swal from "https://cdn.skypack.dev/sweetalert2";
 
-const jakarta = fromLonLat([106.8456, -6.2088]);
-const kyoto = fromLonLat([135.7681, 35.0116]);
-const istanbul = fromLonLat([28.9744, 41.0128]);
-const paris = fromLonLat([2.3522, 48.8566]);
-const tokyo = fromLonLat([139.6917, 35.6895]);
-
-const view = new View({
-  center: istanbul,
-  zoom: 6,
+// Langsung buat TileLayer dengan source OSM agar peta tampil dari awal
+const layer = new TileLayer({
+  source: new OSM(),
 });
 
+// Create Map
 const map = new Map({
-  target: 'map',
-  layers: [
-    new TileLayer({
-      preload: 4,
-      source: new OSM(),
-    }),
-  ],
-  view: view,
+  target: "map",
+  layers: [layer],
+  view: new View({
+    center: fromLonLat([107.57634352477324, -6.87436891415509]), // Center to Sarijadi, Bandung
+    zoom: 16,
+  }),
 });
 
-// A bounce easing method (from https://github.com/DmitryBaranovskiy/raphael).
-function bounce(t) {
-  const s = 7.5625;
-  const p = 2.75;
-  let l;
-  if (t < 1 / p) {
-    l = s * t * t;
+// // Add event listeners to buttons
+// document.getElementById("set-source").onclick = function () {
+//   layer.setSource(source); // Set OSM source to the layer
+// };
+
+// document.getElementById("unset-source").onclick = function () {
+//   layer.setSource(null); // Remove source from the layer
+// };
+
+// Pop-up untuk informasi lokasi
+const popup = document.createElement("div");
+popup.className = "popup";
+document.body.appendChild(popup);
+
+const overlay = new Overlay({
+  element: popup,
+  autoPan: true,
+});
+map.addOverlay(overlay);
+
+// Sumber data marker
+const markerSource = new VectorSource();
+const markerLayer = new VectorLayer({
+  source: markerSource,
+});
+map.addLayer(markerLayer);
+
+// Variabel untuk melacak status pop-up
+let popupVisible = true;
+let userCoordinates = null;
+let userLongitude = null;
+let userLatitude = null;
+
+// Ambil lokasi pengguna
+navigator.geolocation.getCurrentPosition(
+  (pos) => {
+    const { latitude, longitude } = pos.coords;
+    userCoordinates = fromLonLat([longitude, latitude]);
+    userLongitude = longitude;
+    userLatitude = latitude;
+    
+    map.getView().setCenter(userCoordinates);
+    map.getView().setZoom(20);
+
+    const marker = new Feature({
+      geometry: new Point(userCoordinates),
+    });
+    marker.setStyle(
+      new Style({
+        image: new Icon({
+          src: "https://cdn-icons-png.flaticon.com/512/684/684908.png",
+          scale: 0.05,
+        }),
+      })
+    );
+    markerSource.addFeature(marker);
+
+    fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lon=${longitude}&lat=${latitude}`)
+      .then((response) => response.json())
+      .then((data) => {
+        const locationName = data.display_name || "Tidak ada data lokasi";
+        popup.innerHTML = `
+          <button class="close-btn">&times;</button>
+          <h3>Lokasi Anda</h3>
+          <p><strong>Alamat:</strong> ${locationName}</p>
+          <p><strong>Koordinat:</strong> ${longitude.toFixed(6)}, ${latitude.toFixed(6)}</p>
+        `;
+        overlay.setPosition(userCoordinates);
+
+        popup.querySelector(".close-btn").addEventListener("click", () => {
+          overlay.setPosition(undefined);
+          popupVisible = false;
+        });
+      })
+      .catch(() => {
+        popup.innerHTML = `
+          <button class="close-btn">&times;</button>
+          <h3>Lokasi Anda</h3>
+          <p>Data lokasi tidak ditemukan.</p>
+          <p><strong>Koordinat:</strong> ${longitude.toFixed(6)}, ${latitude.toFixed(6)}</p>
+        `;
+        overlay.setPosition(userCoordinates);
+        popup.querySelector(".close-btn").addEventListener("click", () => {
+          overlay.setPosition(undefined);
+          popupVisible = false;
+        });
+      });
+  },
+  () => {
+    Swal.fire({
+      title: "Error",
+      text: "Gagal mengambil lokasi. Pastikan Anda memberikan izin akses lokasi.",
+      icon: "error",
+    });
+  }
+);
+
+// Event klik di peta untuk mendapatkan informasi lokasi
+map.on("click", function (event) {
+  const clickedCoordinates = toLonLat(event.coordinate); // Konversi koordinat ke lon/lat
+  const [longitude, latitude] = clickedCoordinates;
+
+  // Hapus semua marker lama sebelum menambahkan yang baru
+  markerSource.clear();
+
+  // Tambahkan marker baru di lokasi yang diklik
+  const marker = new Feature({
+    geometry: new Point(event.coordinate),
+  });
+  marker.setStyle(
+    new Style({
+      image: new Icon({
+        src: "https://cdn-icons-png.flaticon.com/512/684/684908.png",
+        scale: 0.05,
+      }),
+    })
+  );
+  markerSource.addFeature(marker);
+
+  // Ambil informasi lokasi dari API OpenStreetMap
+  fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lon=${longitude}&lat=${latitude}`)
+    .then((response) => response.json())
+    .then((data) => {
+      const locationName = data.display_name || "Informasi lokasi tidak ditemukan";
+
+      // Tambahkan konten pop-up dengan tombol close
+      popup.innerHTML = `
+        <button class="close-btn">&times;</button>
+        <h3>Informasi Lokasi</h3>
+        <p><strong>Alamat:</strong> ${locationName}</p>
+        <p><strong>Koordinat:</strong> ${longitude.toFixed(6)}, ${latitude.toFixed(6)}</p>
+      `;
+      overlay.setPosition(event.coordinate);
+
+      // Event untuk menutup pop-up saat tombol close diklik
+      popup.querySelector(".close-btn").addEventListener("click", () => {
+        overlay.setPosition(undefined);
+      });
+    })
+    .catch(() => {
+      popup.innerHTML = `
+        <button class="close-btn">&times;</button>
+        <h3>Informasi Lokasi</h3>
+        <p>Data lokasi tidak ditemukan.</p>
+        <p><strong>Koordinat:</strong> ${longitude.toFixed(6)}, ${latitude.toFixed(6)}</p>
+      `;
+      overlay.setPosition(event.coordinate);
+
+      // Event untuk menutup pop-up secara manual
+      popup.querySelector(".close-btn").addEventListener("click", () => {
+        overlay.setPosition(undefined);
+      });
+    });
+});
+
+const backToLocationButton = document.getElementById("back-to-location");
+
+// Fungsi untuk kembali ke lokasi pengguna
+document.getElementById("back-to-location").onclick = function () {
+  if (userCoordinates) {
+    map.getView().setCenter(userCoordinates);
+    map.getView().setZoom(20);
+
+    const marker = new Feature({
+      geometry: new Point(userCoordinates),
+    });
+    marker.setStyle(
+      new Style({
+        image: new Icon({
+          src: "https://cdn-icons-png.flaticon.com/512/684/684908.png",
+          scale: 0.05,
+        }),
+      })
+    );
+    markerSource.addFeature(marker);
+
+    if (userLongitude !== null && userLatitude !== null) {
+      fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lon=${userLongitude}&lat=${userLatitude}`)
+        .then((response) => response.json())
+        .then((data) => {
+          const locationName = data.display_name || "Tidak ada data lokasi";
+          popup.innerHTML = `
+            <button class="close-btn">&times;</button>
+            <h3>Lokasi Anda</h3>
+            <p><strong>Alamat:</strong> ${locationName}</p>
+            <p><strong>Koordinat:</strong> ${userLongitude.toFixed(6)}, ${userLatitude.toFixed(6)}</p>
+          `;
+          overlay.setPosition(userCoordinates);
+
+          popup.querySelector(".close-btn").addEventListener("click", () => {
+            overlay.setPosition(undefined);
+            popupVisible = false;
+          });
+        })
+        .catch(() => {
+          popup.innerHTML = `
+            <button class="close-btn">&times;</button>
+            <h3>Lokasi Anda</h3>
+            <p>Data lokasi tidak ditemukan.</p>
+            <p><strong>Koordinat:</strong> ${userLongitude.toFixed(6)}, ${userLatitude.toFixed(6)}</p>
+          `;
+          overlay.setPosition(userCoordinates);
+          popup.querySelector(".close-btn").addEventListener("click", () => {
+            overlay.setPosition(undefined);
+            popupVisible = false;
+          });
+        });
+    }
   } else {
-    if (t < 2 / p) {
-      t -= 1.5 / p;
-      l = s * t * t + 0.75;
-    } else {
-      if (t < 2.5 / p) {
-        t -= 2.25 / p;
-        l = s * t * t + 0.9375;
-      } else {
-        t -= 2.625 / p;
-        l = s * t * t + 0.984375;
-      }
-    }
+    Swal.fire({
+      title: "Error",
+      text: "Lokasi Anda belum tersedia. Pastikan Anda memberikan izin akses lokasi.",
+      icon: "error",
+    });
   }
-  return l;
-}
-
-// An elastic easing method (from https://github.com/DmitryBaranovskiy/raphael).
-function elastic(t) {
-  return (
-    Math.pow(2, -10 * t) * Math.sin(((t - 0.075) * (2 * Math.PI)) / 0.3) + 1
-  );
-}
-
-function onClick(id, callback) {
-  document.getElementById(id).addEventListener('click', callback);
-}
-
-onClick('rotate-left', function () {
-  view.animate({
-    rotation: view.getRotation() + Math.PI / 2,
-  });
-});
-
-onClick('rotate-right', function () {
-  view.animate({
-    rotation: view.getRotation() - Math.PI / 2,
-  });
-});
-
-onClick('rotate-around-paris', function () {
-  // Rotation animation takes the shortest arc, so animate in two parts
-  const rotation = view.getRotation();
-  view.animate(
-    {
-      rotation: rotation + Math.PI,
-      anchor: paris,
-      easing: easeIn,
-    },
-    {
-      rotation: rotation + 2 * Math.PI,
-      anchor: paris,
-      easing: easeOut,
-    },
-  );
-});
-
-onClick('pan-to-jakarta', function () {
-  view.animate({
-    center: jakarta,
-    duration: 2000,
-  });
-});
-
-onClick('elastic-to-kyoto', function () {
-  view.animate({
-    center: kyoto,
-    duration: 2000,
-    easing: elastic,
-  });
-});
-
-onClick('bounce-to-istanbul', function () {
-  view.animate({
-    center: istanbul,
-    duration: 2000,
-    easing: bounce,
-  });
-});
-
-onClick('spin-to-paris', function () {
-  // Rotation animation takes the shortest arc, so animate in two parts
-  const center = view.getCenter();
-  view.animate(
-    {
-      center: [
-        center[0] + (paris[0] - center[0]) / 2,
-        center[1] + (paris[1] - center[1]) / 2,
-      ],
-      rotation: Math.PI,
-      easing: easeIn,
-    },
-    {
-      center: paris,
-      rotation: 2 * Math.PI,
-      easing: easeOut,
-    },
-  );
-});
-
-function flyTo(location, done) {
-  const duration = 2000;
-  const zoom = view.getZoom();
-  let parts = 2;
-  let called = false;
-  function callback(complete) {
-    --parts;
-    if (called) {
-      return;
-    }
-    if (parts === 0 || !complete) {
-      called = true;
-      done(complete);
-    }
-  }
-  view.animate(
-    {
-      center: location,
-      duration: duration,
-    },
-    callback,
-  );
-  view.animate(
-    {
-      zoom: zoom - 1,
-      duration: duration / 2,
-    },
-    {
-      zoom: zoom,
-      duration: duration / 2,
-    },
-    callback,
-  );
-}
-
-onClick('fly-to-tokyo', function () {
-  flyTo(tokyo, function () {});
-});
-
-function tour() {
-  const locations = [jakarta, tokyo, paris, kyoto, istanbul];
-  let index = -1;
-  function next(more) {
-    if (more) {
-      ++index;
-      if (index < locations.length) {
-        const delay = index === 0 ? 0 : 750;
-        setTimeout(function () {
-          flyTo(locations[index], next);
-        }, delay);
-      } else {
-        alert('Tour complete');
-      }
-    } else {
-      alert('Tour cancelled');
-    }
-  }
-  next(true);
-}
-
-onClick('tour', tour);
-
-map
+};
