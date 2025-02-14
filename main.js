@@ -26,6 +26,30 @@ const map = new Map({
   }),
 });
 
+// Fungsi untuk menampilkan layer
+document.getElementById("set-source").onclick = function () {
+  layer.setSource(new OSM()); // Mengatur ulang sumber layer ke OSM
+  Swal.fire({
+    title: "Layer Ditampilkan",
+    text: "Layer OpenStreetMap telah ditampilkan.",
+    icon: "success",
+    timer: 1500,
+    showConfirmButton: false,
+  });
+};
+
+// Fungsi untuk menyembunyikan layer
+document.getElementById("unset-source").onclick = function () {
+  layer.setSource(null); // Menghapus sumber dari layer
+  Swal.fire({
+    title: "Layer Disembunyikan",
+    text: "Layer OpenStreetMap telah disembunyikan.",
+    icon: "info",
+    timer: 1500,
+    showConfirmButton: false,
+  });
+};
+
 // // Add event listeners to buttons
 // document.getElementById("set-source").onclick = function () {
 //   layer.setSource(source); // Set OSM source to the layer
