@@ -26,39 +26,6 @@ const map = new Map({
   }),
 });
 
-// Fungsi untuk menampilkan layer
-document.getElementById("set-source").onclick = function () {
-  layer.setSource(new OSM()); // Mengatur ulang sumber layer ke OSM
-  Swal.fire({
-    title: "Layer Ditampilkan",
-    text: "Layer OpenStreetMap telah ditampilkan.",
-    icon: "success",
-    timer: 1500,
-    showConfirmButton: false,
-  });
-};
-
-// Fungsi untuk menyembunyikan layer
-document.getElementById("unset-source").onclick = function () {
-  layer.setSource(null); // Menghapus sumber dari layer
-  Swal.fire({
-    title: "Layer Disembunyikan",
-    text: "Layer OpenStreetMap telah disembunyikan.",
-    icon: "info",
-    timer: 1500,
-    showConfirmButton: false,
-  });
-};
-
-// // Add event listeners to buttons
-// document.getElementById("set-source").onclick = function () {
-//   layer.setSource(source); // Set OSM source to the layer
-// };
-
-// document.getElementById("unset-source").onclick = function () {
-//   layer.setSource(null); // Remove source from the layer
-// };
-
 // Pop-up untuk informasi lokasi
 const popup = document.createElement("div");
 popup.className = "popup";
@@ -77,11 +44,43 @@ const markerLayer = new VectorLayer({
 });
 map.addLayer(markerLayer);
 
-// Variabel untuk melacak status pop-up
-let popupVisible = true;
+// Variabel untuk menyimpan status layer
+let layerVisible = true;
 let userCoordinates = null;
 let userLongitude = null;
 let userLatitude = null;
+
+// Fungsi untuk menampilkan layer
+document.getElementById("set-source").onclick = function () {
+  layer.setSource(new OSM()); // Menampilkan kembali layer peta
+  map.addLayer(markerLayer); // Menampilkan kembali marker layer
+  overlay.setPosition(userCoordinates); // Menampilkan kembali pop-up
+
+  layerVisible = true;
+  Swal.fire({
+    title: "Layer Ditampilkan",
+    text: "Layer OpenStreetMap telah ditampilkan.",
+    icon: "success",
+    timer: 1500,
+    showConfirmButton: false,
+  });
+};
+
+// Fungsi untuk menyembunyikan layer, marker, dan pop-up
+document.getElementById("unset-source").onclick = function () {
+  layer.setSource(null); // Menyembunyikan peta
+  map.removeLayer(markerLayer); // Menyembunyikan marker layer
+  overlay.setPosition(undefined); // Menutup pop-up
+
+  layerVisible = false;
+  Swal.fire({
+    title: "Layer Disembunyikan",
+    text: "Layer OpenStreetMap dan markernya telah disembunyikan.",
+    icon: "info",
+    timer: 1500,
+    showConfirmButton: false,
+  });
+};
 
 // Ambil lokasi pengguna
 navigator.geolocation.getCurrentPosition(
@@ -90,7 +89,7 @@ navigator.geolocation.getCurrentPosition(
     userCoordinates = fromLonLat([longitude, latitude]);
     userLongitude = longitude;
     userLatitude = latitude;
-    
+
     map.getView().setCenter(userCoordinates);
     map.getView().setZoom(20);
 
@@ -117,11 +116,13 @@ navigator.geolocation.getCurrentPosition(
           <p><strong>Alamat:</strong> ${locationName}</p>
           <p><strong>Koordinat:</strong> ${longitude.toFixed(6)}, ${latitude.toFixed(6)}</p>
         `;
-        overlay.setPosition(userCoordinates);
+
+        if (layerVisible) {
+          overlay.setPosition(userCoordinates);
+        }
 
         popup.querySelector(".close-btn").addEventListener("click", () => {
           overlay.setPosition(undefined);
-          popupVisible = false;
         });
       })
       .catch(() => {
@@ -131,10 +132,13 @@ navigator.geolocation.getCurrentPosition(
           <p>Data lokasi tidak ditemukan.</p>
           <p><strong>Koordinat:</strong> ${longitude.toFixed(6)}, ${latitude.toFixed(6)}</p>
         `;
-        overlay.setPosition(userCoordinates);
+
+        if (layerVisible) {
+          overlay.setPosition(userCoordinates);
+        }
+
         popup.querySelector(".close-btn").addEventListener("click", () => {
           overlay.setPosition(undefined);
-          popupVisible = false;
         });
       });
   },
@@ -149,13 +153,13 @@ navigator.geolocation.getCurrentPosition(
 
 // Event klik di peta untuk mendapatkan informasi lokasi
 map.on("click", function (event) {
-  const clickedCoordinates = toLonLat(event.coordinate); // Konversi koordinat ke lon/lat
+  if (!layerVisible) return; // Jangan tampilkan marker atau pop-up jika layer disembunyikan
+
+  const clickedCoordinates = toLonLat(event.coordinate);
   const [longitude, latitude] = clickedCoordinates;
 
-  // Hapus semua marker lama sebelum menambahkan yang baru
-  markerSource.clear();
+  markerSource.clear(); // Hapus semua marker lama
 
-  // Tambahkan marker baru di lokasi yang diklik
   const marker = new Feature({
     geometry: new Point(event.coordinate),
   });
@@ -169,22 +173,20 @@ map.on("click", function (event) {
   );
   markerSource.addFeature(marker);
 
-  // Ambil informasi lokasi dari API OpenStreetMap
   fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lon=${longitude}&lat=${latitude}`)
     .then((response) => response.json())
     .then((data) => {
       const locationName = data.display_name || "Informasi lokasi tidak ditemukan";
 
-      // Tambahkan konten pop-up dengan tombol close
       popup.innerHTML = `
         <button class="close-btn">&times;</button>
         <h3>Informasi Lokasi</h3>
         <p><strong>Alamat:</strong> ${locationName}</p>
         <p><strong>Koordinat:</strong> ${longitude.toFixed(6)}, ${latitude.toFixed(6)}</p>
       `;
+
       overlay.setPosition(event.coordinate);
 
-      // Event untuk menutup pop-up saat tombol close diklik
       popup.querySelector(".close-btn").addEventListener("click", () => {
         overlay.setPosition(undefined);
       });
@@ -196,16 +198,14 @@ map.on("click", function (event) {
         <p>Data lokasi tidak ditemukan.</p>
         <p><strong>Koordinat:</strong> ${longitude.toFixed(6)}, ${latitude.toFixed(6)}</p>
       `;
+
       overlay.setPosition(event.coordinate);
 
-      // Event untuk menutup pop-up secara manual
       popup.querySelector(".close-btn").addEventListener("click", () => {
         overlay.setPosition(undefined);
       });
     });
 });
-
-const backToLocationButton = document.getElementById("back-to-location");
 
 // Fungsi untuk kembali ke lokasi pengguna
 document.getElementById("back-to-location").onclick = function () {
@@ -213,50 +213,21 @@ document.getElementById("back-to-location").onclick = function () {
     map.getView().setCenter(userCoordinates);
     map.getView().setZoom(20);
 
-    const marker = new Feature({
-      geometry: new Point(userCoordinates),
-    });
-    marker.setStyle(
-      new Style({
-        image: new Icon({
-          src: "https://cdn-icons-png.flaticon.com/512/684/684908.png",
-          scale: 0.05,
-        }),
-      })
-    );
-    markerSource.addFeature(marker);
-
-    if (userLongitude !== null && userLatitude !== null) {
-      fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lon=${userLongitude}&lat=${userLatitude}`)
-        .then((response) => response.json())
-        .then((data) => {
-          const locationName = data.display_name || "Tidak ada data lokasi";
-          popup.innerHTML = `
-            <button class="close-btn">&times;</button>
-            <h3>Lokasi Anda</h3>
-            <p><strong>Alamat:</strong> ${locationName}</p>
-            <p><strong>Koordinat:</strong> ${userLongitude.toFixed(6)}, ${userLatitude.toFixed(6)}</p>
-          `;
-          overlay.setPosition(userCoordinates);
-
-          popup.querySelector(".close-btn").addEventListener("click", () => {
-            overlay.setPosition(undefined);
-            popupVisible = false;
-          });
+    if (layerVisible) {
+      const marker = new Feature({
+        geometry: new Point(userCoordinates),
+      });
+      marker.setStyle(
+        new Style({
+          image: new Icon({
+            src: "https://cdn-icons-png.flaticon.com/512/684/684908.png",
+            scale: 0.05,
+          }),
         })
-        .catch(() => {
-          popup.innerHTML = `
-            <button class="close-btn">&times;</button>
-            <h3>Lokasi Anda</h3>
-            <p>Data lokasi tidak ditemukan.</p>
-            <p><strong>Koordinat:</strong> ${userLongitude.toFixed(6)}, ${userLatitude.toFixed(6)}</p>
-          `;
-          overlay.setPosition(userCoordinates);
-          popup.querySelector(".close-btn").addEventListener("click", () => {
-            overlay.setPosition(undefined);
-            popupVisible = false;
-          });
-        });
+      );
+      markerSource.addFeature(marker);
+
+      overlay.setPosition(userCoordinates);
     }
   } else {
     Swal.fire({
@@ -266,3 +237,4 @@ document.getElementById("back-to-location").onclick = function () {
     });
   }
 };
+
